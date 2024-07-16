@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navon Experiment</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/jspsych.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-html-keyboard-response.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-image-keyboard-response.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-survey-html-form.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-fullscreen.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div id="jspsych-target"></div>
+
+    <script>
+        // 创建被试信息表单
+        const participant_info = {
+            type: 'survey-html-form',
+            preamble: '<h2>请输入您的信息</h2>',
+            html: `
+                <p>您的姓名是：<input name="name" type="text" required></p>
+                <p>您的年龄是：<input name="age" type="number" required></p>
+                <p>您的优势手是：<input name="hand" type="text" required></p>
+            `,
+            button_label: '继续',
+            on_finish: function(data){
+                console.log("Raw responses: ", data.responses); // 输出原始 responses 以便调试
+                if (data.responses) {
+                    try {
+                        var responses = JSON.parse(data.responses);
+                        console.log("Parsed responses: ", responses); // 输出解析后的 responses 以便调试
+                        jsPsych.data.addProperties({
+                            name: responses.name,
+                            age: responses.age,
+                            hand: responses.hand
+                        });
+                    } catch (error) {
+                        console.error("Error parsing responses: ", error);
+                    }
+                } else {
+                    console.error("No responses received.");
+                }
+            }
+        };
+
+        // 全屏插件
+        const fullscreen = {
+            type: 'fullscreen',
+            fullscreen_mode: true
+        };
+
+        // 指导语图片
+        const instructions = {
+            type: 'image-keyboard-response',
+            stimulus: '总指导语.png',
+            choices: [' ']
+        };
+
+        // 整体判断图片
+        const global_judgment = {
+            type: 'image-keyboard-response',
+            stimulus: '判断整体.png',
+            choices: [' ']
+        };
+
+        // 局部判断图片
+        const local_judgment = {
+            type: 'image-keyboard-response',
+            stimulus: '判断局部.png',
+            choices: [' ']
+        };
+
+        // 刺激列表
+        const stimuli = [
+            { stimulus: 'L-L.png', correct_response: 'j' },
+            { stimulus: 'L-T.png', correct_response: 'f' },
+            { stimulus: 'T-L.png', correct_response: 'j' },
+            { stimulus: 'T-T.png', correct_response: 'f' }
+        ];
+
+        // 生成试次
+        function generate_trials(part) {
+            let trials = [];
+            for (let i = 0; i < 2; i++) {
+                stimuli.forEach(stimulus => {
+                    trials.push({
+                        type: 'image-keyboard-response',
+                        stimulus: stimulus.stimulus,
+                        choices: ['f', 'j'],
+                        trial_duration: 3000,
+                        data: { correct_response: stimulus.correct_response, part: part },
+                        on_finish: function(data) {
+                            data.correct = data.response === data.correct_response ? 1 : 0;
+                        }
+                    });
+                });
+            }
+            return trials;
+        }
+
+        // 休息屏幕
+        const rest_screen = {
+            type: 'html-keyboard-response',
+            stimulus: '<p>该部分结束，请休息30s。或者按空格键继续</p>',
+            choices: [' '],
+            trial_duration: 30000
+        };
+
+        // 结束图片
+        const end_screen = {
+            type: 'image-keyboard-response',
+            stimulus: 'End.png',
+            choices: jsPsych.NO_KEYS,
+            trial_duration: 3000
+        };
+
+        // 计算并显示正确率
+        const show_accuracy = {
+            type: 'html-keyboard-response',
+            stimulus: function() {
+                let correct_trials = jsPsych.data.get().filter({correct: 1}).count();
+                let total_trials = jsPsych.data.get().filter({correct: 1}).count() + jsPsych.data.get().filter({correct: 0}).count();
+                let accuracy = Math.round((correct_trials / total_trials) * 100);
+                return `<p>您的正确率为${accuracy}%</p>`;
+            },
+            choices: jsPsych.NO_KEYS,
+            trial_duration: 3000
+        };
+
+        // 保存结果为Excel文件
+        function save_data() {
+            let data = jsPsych.data.get().json();
+            let blob = new Blob([data], { type: 'application/json' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = 'results.json';
+            a.click();
+        }
+
+        // 流程结构
+        let timeline = [];
+
+        timeline.push(participant_info);
+        timeline.push(fullscreen);
+        timeline.push(instructions);
+        timeline.push(global_judgment);
+        timeline = timeline.concat(generate_trials('global'));
+        timeline.push(rest_screen);
+        timeline.push(local_judgment);
+        timeline = timeline.concat(generate_trials('local'));
+        timeline.push(end_screen);
+        timeline.push(show_accuracy);
+
+        jsPsych.init({
+            timeline: timeline,
+            on_finish: save_data
+        });
+    </script>
+</body>
+</html>
