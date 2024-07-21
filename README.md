@@ -163,7 +163,7 @@ const show_accuracy = {
 };
 ```
 
-10. 保存结果为Excel文件
+10. 保存结果为json文件
 
 ```javascript
 function save_data() {
